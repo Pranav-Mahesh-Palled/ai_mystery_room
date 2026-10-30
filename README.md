@@ -81,7 +81,7 @@ Screenshots: [Home, mobile](client/test-artifacts/screenshots/home-mobile-375.pn
 
 `npm audit` currently reports advisories in the existing Vite/esbuild, React Router, and Zod dependency lines. The suggested fixes require major-version changes, so dependencies were not force-upgraded during this verification setup. Review and schedule those upgrades before production deployment.
 
-### Dependency and styling update (Phase 6.2)
+### Dependency and styling update
 
 The client uses Tailwind CSS v4 through the official Vite plugin for structural utility classes while retaining its existing custom visual styles. Tailwind Preflight is intentionally omitted to preserve the existing design. Vite/esbuild, React Router, and Zod were updated to patched releases; the React Router and Zod updates cross a major version. The application uses supported declarative React Router APIs and Zod APIs that remain available in Zod 4.
 
