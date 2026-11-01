@@ -5,7 +5,7 @@ import { setTimeout as delay } from 'node:timers/promises';
 import { fileURLToPath } from 'node:url';
 
 const clientRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const baseUrl = 'http://127.0.0.1:5173';
+const baseUrl = 'http://127.0.0.1:5174';
 const viteEntry = path.join(clientRoot, 'node_modules', 'vite', 'bin', 'vite.js');
 const playwrightCli = path.join(clientRoot, 'node_modules', '@playwright', 'test', 'cli.js');
 
@@ -40,19 +40,18 @@ let testProcess = null;
 let exitCode = 1;
 
 try {
-  if (!await serverIsReady()) {
-    ownedServer = spawn(process.execPath, [viteEntry, '--host', '127.0.0.1'], {
-      cwd: clientRoot,
-      stdio: 'inherit',
-      windowsHide: true,
-    });
-    await waitForServer(ownedServer);
-  }
+  ownedServer = spawn(process.execPath, [viteEntry, '--host', '127.0.0.1', '--port', '5174', '--strictPort'], {
+    cwd: clientRoot,
+    stdio: 'inherit',
+    windowsHide: true,
+  });
+  await waitForServer(ownedServer);
 
   testProcess = spawn(process.execPath, [playwrightCli, 'test', ...process.argv.slice(2)], {
     cwd: clientRoot,
     stdio: 'inherit',
     windowsHide: true,
+    env: { ...process.env, PLAYWRIGHT_BASE_URL: baseUrl },
   });
   const [code, signal] = await once(testProcess, 'exit');
   exitCode = signal ? 1 : code ?? 1;

@@ -3,11 +3,13 @@ import cors from 'cors';
 import { isDatabaseConnected } from './config/db.js';
 import { errorHandler, notFoundHandler } from './middleware/errorHandler.js';
 import { allowedOrigins } from './config/cors.js';
+import { requestDiagnostics } from './middleware/requestDiagnostics.js';
 import caseRoutes from './routes/caseRoutes.js';
 
 const app = express();
 
 app.disable('x-powered-by');
+app.use(requestDiagnostics);
 app.use(cors({
   origin(origin, callback) {
     // Requests from scripts and health checks have no Origin header.

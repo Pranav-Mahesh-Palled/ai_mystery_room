@@ -12,7 +12,8 @@ function unwrap(request) {
 
 export const caseApi = {
   createMystery({ premise, difficulty }) {
-    return unwrap(api.post('/cases', { premise, difficulty }));
+    // Provider calls can take 45 seconds per attempt, with one bounded retry.
+    return unwrap(api.post('/cases', { premise, difficulty }, { timeout: 100_000 }));
   },
   getCase(caseId, config) {
     return unwrap(api.get(`/cases/${encodeURIComponent(caseId)}`, config));
@@ -39,12 +40,15 @@ export function getApiErrorCode(error) {
 
 export function getApiErrorMessage(error) {
   if (!error?.response) {
+    if (error?.code === 'ECONNABORTED' || error?.code === 'ETIMEDOUT') {
+      return 'This request is taking longer than expected. Please try again; it may still finish saving.';
+    }
     return 'The case server could not be reached. Check your connection and try again.';
   }
 
   const code = getApiErrorCode(error);
   if (code === 'RATE_LIMITED') return 'Too many new cases were requested. Please wait a little and try again.';
-  if (['DATABASE_UNAVAILABLE', 'DATABASE_ERROR', 'GEMINI_UNAVAILABLE', 'GEMINI_TIMEOUT', 'GEMINI_RATE_LIMITED', 'GEMINI_NOT_CONFIGURED'].includes(code)) {
+  if (['DATABASE_UNAVAILABLE', 'DATABASE_ERROR', 'GEMINI_UNAVAILABLE', 'GEMINI_TIMEOUT', 'GEMINI_RATE_LIMITED', 'GEMINI_NOT_CONFIGURED', 'OPENAI_UNAVAILABLE', 'OPENAI_TIMEOUT', 'OPENAI_RATE_LIMITED', 'OPENAI_NOT_CONFIGURED', 'OPENAI_INCOMPLETE'].includes(code)) {
     return 'The case room is temporarily unavailable. Your information is still here; please try again shortly.';
   }
   if (code === 'CASE_NOT_FOUND' || code === 'CLUE_NOT_FOUND') return 'This case could not be found. It may have expired or the link may be incomplete.';

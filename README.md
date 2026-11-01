@@ -4,7 +4,7 @@ An anonymous detective game. Players provide a premise, choose a difficulty, exa
 
 ## Features
 
-- Gemini-generated mysteries validated against the selected difficulty.
+- Gemini-generated mysteries by default, with OpenAI as an optional backend provider; both outputs are validated against the selected difficulty.
 - Easy, Medium, and Hard cases with server-owned gameplay state and scoring.
 - Active-case responses hide the solution, locked hint text, and undiscovered clue descriptions.
 - React investigation, accusation, and results screens with responsive layouts.
@@ -18,9 +18,9 @@ An anonymous detective game. Players provide a premise, choose a difficulty, exa
 
 ## Requirements and local setup
 
-Use Node.js 20 or newer and npm. MongoDB and a Gemini API key are required to run the complete local game. Copy the example files to `.env` and set private values locally; never put the Gemini key in a `VITE_*` variable.
+Use Node.js 20 or newer and npm. MongoDB and the API key for the selected provider are required to run the complete local game. Copy the example files to `.env` and set private values locally; provider keys and model settings belong only in the server environment, never in a `VITE_*` variable.
 
-1. In `server/`, copy `.env.example` to `.env` and set `MONGODB_URI`, `GEMINI_API_KEY`, and (if needed) `GEMINI_MODEL`. The default example is `gemini-3.8-flash`.
+1. In `server/`, copy `.env.example` to `.env` and set `MONGODB_URI`. Gemini remains the default (`AI_PROVIDER=gemini`); set `GEMINI_API_KEY` and optionally `GEMINI_MODEL` (`gemini-3.8-flash`). To use OpenAI, set `AI_PROVIDER=openai`, `OPENAI_API_KEY`, and optionally `OPENAI_MODEL` (`gpt-6-luna`). Only the selected provider needs a key. Switching `AI_PROVIDER` does not require application code changes.
 2. In `client/`, copy `.env.example` to `.env`; set `VITE_API_BASE_URL` if the API is not at `http://localhost:5000/api`.
 3. Install dependencies with `npm install` in both `server/` and `client/`.
 4. Start the API with `npm run dev` in `server/`, then start the client with `npm run dev` in `client/`.
@@ -32,8 +32,11 @@ Use Node.js 20 or newer and npm. MongoDB and a Gemini API key are required to ru
 | --- | --- | --- |
 | `PORT` | Server | HTTP port (defaults to `5000`). |
 | `MONGODB_URI` | Server | MongoDB connection string. |
+| `AI_PROVIDER` | Server | `gemini` (default) or `openai`; provider selection stays on the backend. |
 | `GEMINI_API_KEY` | Server | Gemini credential; keep private. |
 | `GEMINI_MODEL` | Server | Gemini model ID; defaults in `.env.example`. |
+| `OPENAI_API_KEY` | Server | OpenAI API credential; keep private. |
+| `OPENAI_MODEL` | Server | OpenAI model ID; defaults to `gpt-6-luna`. |
 | `CLIENT_URL` | Server | Allowed frontend origin(s), comma-separated. |
 | `NODE_ENV` | Server | Runtime environment. |
 | `VITE_API_BASE_URL` | Client | Public API base URL compiled into the frontend. |
@@ -55,6 +58,10 @@ Run commands from the relevant directory:
 
 The Playwright suite uses Chromium and deterministic, test-only API responses; it does not call Gemini or MongoDB. Install its browser once with `npx playwright install chromium`. Browser screenshots are saved under `client/test-artifacts/screenshots/`. The backend route tests exercise real Express routes/controllers but use an in-memory test model; they do not establish live MongoDB behavior. No lint script is configured.
 
+### Optional live OpenAI check
+
+After configuring `AI_PROVIDER=openai`, `OPENAI_API_KEY`, and optionally `OPENAI_MODEL` in `server/.env`, run `npm run verify:openai` from `server/` to make one Medium-difficulty mystery request. It validates the returned mystery and prints only counts and verification status; it does not save a case or print story/solution content. Do not run it until ready to incur API usage. OpenAI API billing is separate from ChatGPT subscriptions. Automated tests mock both providers and make no paid API calls.
+
 ### Optional live Gemini check
 
 After configuring `GEMINI_API_KEY` and `GEMINI_MODEL` in `server/.env`, check the model against real structured-output generation for all three difficulty levels with `npm run verify:gemini` from `server/`. This makes three provider requests and may incur usage charges. The script does not save cases or print generated mystery content, API keys, or provider error details. Review your provider usage limits before running it. Routine tests do not call Gemini.
@@ -75,7 +82,7 @@ All endpoints use the `/api` prefix. Errors use `{ "error": { "code", "message" 
 
 ## Verification status
 
-Latest local verification (30 October 2026): 32 backend tests passed, 15 Chromium browser tests passed, application JavaScript syntax checks passed, and the frontend production build passed. The browser suite checked 375, 430, 768, 1366, and 1920 pixel viewport widths and saved ten page screenshots at 375px and 1366px. Browser tests use test-only API responses; they do not establish live Gemini or MongoDB behavior. Live credentials are not configured in this environment, and deployed production URLs have not been verified.
+Latest local verification (31 October 2026): 38 backend tests passed, 15 Chromium browser tests passed, 23 server JavaScript syntax checks passed, and the frontend production build passed. Full client and server `npm audit` checks reported zero vulnerabilities. Provider tests use mocked responses; no live Gemini or OpenAI requests were made, and deployed production URLs have not been verified. Browser tests use test-only API responses and do not establish live MongoDB behavior.
 
 Screenshots: [Home, mobile](client/test-artifacts/screenshots/home-mobile-375.png), [Create, mobile](client/test-artifacts/screenshots/create-mobile-375.png), [Investigation, mobile](client/test-artifacts/screenshots/investigation-mobile-375.png), [Accusation, mobile](client/test-artifacts/screenshots/accusation-mobile-375.png), [Results, mobile](client/test-artifacts/screenshots/results-mobile-375.png); corresponding desktop screenshots are in the same directory with the `desktop-1366` suffix.
 
@@ -136,6 +143,9 @@ Add these variables in the Render service's Environment settings. Enter real val
 | `MONGODB_URI` | Atlas connection string for the `ai_mystery_room` database; secret |
 | `GEMINI_API_KEY` | A key authorized for the Gemini API; secret |
 | `GEMINI_MODEL` | `gemini-3.8-flash` |
+| `AI_PROVIDER` | `gemini` (default) or `openai` |
+| `OPENAI_API_KEY` | OpenAI API key; secret when OpenAI is selected |
+| `OPENAI_MODEL` | `gpt-6-luna` |
 | `CLIENT_URL` | The Vercel production origin, such as `https://<project>.vercel.app`; no path or trailing slash |
 | `PORT` | Supplied by Render; do not set a fixed value |
 
@@ -159,7 +169,7 @@ Set this environment variable for the Production environment (and Preview only i
 | --- | --- |
 | `VITE_API_BASE_URL` | `https://<render-service>.onrender.com/api` |
 
-The client API module appends paths such as `/cases`, so the value **must include `/api` exactly once** and must not have a trailing slash. This is a public build-time URL. Never add `MONGODB_URI` or `GEMINI_API_KEY` to Vercel. Redeploy the frontend after changing this build-time variable. The Vercel rewrite sends nested paths to `/index.html`; React Router handles the five application routes and renders its not-found screen for unknown paths.
+The client API module appends paths such as `/cases`, so the value **must include `/api` exactly once** and must not have a trailing slash. This is a public build-time URL. Never add `MONGODB_URI` or either provider key/model setting to Vercel. Redeploy the frontend after changing this build-time variable. The Vercel rewrite sends nested paths to `/index.html`; React Router handles the five application routes and renders its not-found screen for unknown paths.
 
 ### 5. Production preflight and manual verification
 
@@ -169,7 +179,7 @@ After the dashboards are configured and both services deploy, check these in ord
 2. Open the Vercel production URL and directly load and refresh `/`, `/create`, `/cases/<case-id>`, `/cases/<case-id>/accuse`, and `/cases/<case-id>/result`. The case routes require an existing ID and state; unknown paths should show the app's not-found screen.
 3. Confirm the browser's API requests go to the Render URL with one `/api` prefix. A browser CORS error usually means `CLIENT_URL` does not exactly match the Vercel origin; update it and redeploy Render.
 4. Complete the production checks in `spec.md` for Easy, Medium, and Hard, including refresh persistence, hint limits, accusation, and results. Inspect active-game Network responses to ensure the solution, undiscovered clue descriptions, locked hint text, and final score remain hidden.
-5. Live mystery generation calls Gemini and may incur charges. Do not run `npm run verify:gemini` or submit a production generation request until you have confirmed that you are ready to make live Gemini requests. Automated tests use mocks and do not verify Atlas or Gemini connectivity.
+5. Live mystery generation calls the selected provider and may incur charges. Do not run either provider verification script or submit a production generation request until ready to make live API requests. Automated tests use mocks and do not verify Atlas or provider connectivity.
 
 Common configuration failures:
 
@@ -178,11 +188,11 @@ Common configuration failures:
 - Frontend API requests return `404`: ensure `VITE_API_BASE_URL` ends in `/api` exactly once.
 - Browser requests fail CORS: set `CLIENT_URL` to the exact Vercel origin(s), without a path, then redeploy Render.
 - Nested Vercel routes return a hosting 404: confirm `client/vercel.json` rewrites to `/index.html` and the Output Directory is `dist`.
-- Gemini generation returns a safe service error: verify the Render key, model ID, provider access, and usage limits in the provider dashboard; never troubleshoot by printing the key or raw provider response.
+- Mystery generation returns a safe service error: verify `AI_PROVIDER`, the selected provider's Render key, model ID, provider access, and usage limits in that provider's dashboard; never troubleshoot by printing the key or raw provider response.
 
 ### Local versus production settings
 
-For local development, use `server/.env` for the local MongoDB URI, Gemini key, `GEMINI_MODEL`, and `CLIENT_URL=http://localhost:5173`; use `client/.env` for `VITE_API_BASE_URL=http://localhost:5000/api`. These local files are ignored by Git. For production, set the server variables in Render and only `VITE_API_BASE_URL` in Vercel. Keep the example files as placeholders and never commit production values.
+For local development, use `server/.env` for the local MongoDB URI, `AI_PROVIDER`, the selected provider key/model, and `CLIENT_URL=http://localhost:5173`; use `client/.env` for `VITE_API_BASE_URL=http://localhost:5000/api`. These local files are ignored by Git. For production, set provider variables only in Render and only `VITE_API_BASE_URL` in Vercel. Keep the example files as placeholders and never commit production values. OpenAI API usage is billed separately from ChatGPT subscriptions.
 
 The app is anonymous: a case ID is a shareable session identifier, not authentication or an ownership check. Do not store personal or confidential information in a premise. The current project has not been pushed to GitHub, and no Atlas, Render, Vercel, or live Gemini configuration has been verified.
 

@@ -7,11 +7,12 @@ export function createGenerationRateLimiter(options = {}) {
     standardHeaders: true,
     legacyHeaders: false,
     message: undefined,
-    handler(_request, response) {
+    handler(request, response) {
       response.status(429).json({
         error: {
           code: 'RATE_LIMITED',
           message: 'Mystery generation is temporarily limited. Please try again later.',
+          ...(request.requestId ? { requestId: request.requestId } : {}),
         },
       });
     },

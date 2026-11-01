@@ -1,6 +1,6 @@
 import Case from '../models/Case.js';
 import { isDatabaseConnected } from '../config/db.js';
-import { generateMystery, MysteryGenerationError } from '../services/geminiService.js';
+import { generateMystery, getAIProvider, MysteryGenerationError } from '../services/aiService.js';
 import { validateMysteryOutput } from '../utils/validators.js';
 import { sanitizeActiveCase } from '../utils/sanitizer.js';
 import { calculateScore } from '../utils/scoring.js';
@@ -136,12 +136,20 @@ export function createCaseController({
 
   return {
     async createCase(request, response) {
+      const diagnostics = request.generationDiagnostics;
+      if (diagnostics) {
+        diagnostics.controllerReached = true;
+        diagnostics.databaseAvailable = Boolean(dbIsReady());
+        try { diagnostics.provider = getAIProvider(); } catch { diagnostics.provider = 'unsupported'; }
+      }
       requireDatabase(dbIsReady);
       const { premise, difficulty } = request.body;
       let content;
       try {
         const generated = await generateContent({ premise, difficulty });
+        if (diagnostics) diagnostics.providerGenerationSucceeded = true;
         content = validateMysteryOutput(generated, difficulty);
+        if (diagnostics) diagnostics.validationSucceeded = true;
       } catch (error) {
         if (error instanceof MysteryGenerationError) throw error;
         throw apiError(502, 'MYSTERY_GENERATION_FAILED', 'The mystery could not be generated. Please try again.');
@@ -163,6 +171,7 @@ export function createCaseController({
 
       try {
         await caseDocument.save();
+        if (diagnostics) diagnostics.persistenceSucceeded = true;
       } catch (error) {
         throw databaseError(error, dbIsReady);
       }

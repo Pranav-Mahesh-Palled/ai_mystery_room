@@ -23,7 +23,7 @@ Treat this file as the acceptance contract for implementation.
 
 ### A1. Overview
 
-AI Mystery Room lets a player provide a short premise and choose a difficulty. Gemini generates a detective mystery with a story, suspects, alibis, clues, progressive hints, and a hidden solution. The player investigates, optionally spends points on hints, accuses one suspect, and receives a verdict with an explanation and score breakdown.
+AI Mystery Room lets a player provide a short premise and choose a difficulty. Gemini is the original, default mystery provider; OpenAI is an optional backend-selected alternative. Either provider generates a detective mystery with a story, suspects, alibis, clues, progressive hints, and a hidden solution. The player investigates, optionally spends points on hints, accuses one suspect, and receives a verdict with an explanation and score breakdown.
 
 ### A2. Goals
 
@@ -47,7 +47,7 @@ AI Mystery Room lets a player provide a short premise and choose a difficulty. G
 **Required MVP:**
 - Home screen and instructions.
 - Premise input and three difficulty choices.
-- Gemini mystery generation with validation.
+- Gemini mystery generation with validation; optional OpenAI generation using the same validated contract.
 - Investigation room with suspect cards, locked/discovered clues, hints, and progress.
 - Final accusation and results screen.
 - Backend-authoritative score calculation.
@@ -64,12 +64,12 @@ AI Mystery Room lets a player provide a short premise and choose a difficulty. G
 ## B. Required Technology Stack
 
 - **Frontend:** React 18+, Vite, JavaScript ES modules, Tailwind CSS, React Router DOM, Axios.
-- **Backend:** Node.js, Express, MongoDB, Mongoose, `@google/genai`, Zod, CORS, dotenv.
+- **Backend:** Node.js, Express, MongoDB, Mongoose, `@google/genai`, `openai`, Zod, CORS, dotenv.
 - **Recommended protection/testing packages:** `express-rate-limit`; a test runner and HTTP test client such as Vitest and Supertest.
 - **Database hosting:** MongoDB Atlas.
 - **Backend hosting:** Render Web Service.
 - **Frontend hosting:** Vercel.
-- **AI model:** Read the model name from `GEMINI_MODEL`. The selected deployment model is `gemini-3.8-flash`; confirm its availability for the configured API key before deployment. Google's current model documentation lists it as stable and supporting structured outputs (checked 30 October 2026).
+- **AI provider:** `AI_PROVIDER` selects `gemini` (default, original provider) or optional `openai`. Only the selected provider's API key is required. Gemini reads `GEMINI_MODEL` (default `gemini-3.8-flash`); OpenAI reads `OPENAI_MODEL` (default `gpt-6-luna`). Provider choice and secrets stay on the backend.
 
 Do not put the Gemini API key in any `VITE_*` variable. Frontend environment variables are public after bundling.
 
@@ -113,7 +113,9 @@ ai-mystery-room/
     ├── models/Case.js
     ├── routes/caseRoutes.js
     ├── controllers/caseController.js
+    ├── services/aiService.js
     ├── services/geminiService.js
+    ├── services/openaiService.js
     ├── middleware/errorHandler.js
     ├── middleware/rateLimiter.js
     └── utils/
@@ -449,7 +451,7 @@ Expected errors: `400` invalid suspect or already completed, `404` case not foun
 
 ## J. Security, Reliability, and Operational Requirements
 
-- Keep `GEMINI_API_KEY` and `MONGODB_URI` in server environment variables only.
+- Keep both provider API keys and `MONGODB_URI` in server environment variables only. Never expose provider credentials or model configuration to the frontend.
 - Commit `.env.example` files with placeholders, never real credentials.
 - Ensure `.env`, local secrets, build artifacts, and logs containing secrets are in `.gitignore`.
 - Configure CORS to allow the expected local development origin and configured production frontend origin only.
@@ -458,7 +460,7 @@ Expected errors: `400` invalid suspect or already completed, `404` case not foun
 - Never build MongoDB queries directly from arbitrary user-supplied objects.
 - Use fixed, server-owned scoring constants; ignore any client-supplied score/count values.
 - Use an explicit sanitizer/DTO on every active-case and result response. Avoid serializing complete Mongoose documents by default.
-- Handle database disconnection and Gemini failures without crashing the server.
+- Handle database disconnection and selected-provider failures without crashing the server; never silently fall back to another provider.
 - Use bounded timeouts and one bounded generation retry, not infinite retry loops.
 - Keep server logs useful but sanitized. Do not log API keys or unnecessary premise/story content.
 - Protect state transitions against duplicate clue discovery, accidental duplicate hint requests, and concurrent accusations.
@@ -472,12 +474,15 @@ Expected errors: `400` invalid suspect or already completed, `404` case not foun
 NODE_ENV=development
 PORT=5000
 MONGODB_URI=mongodb_connection_string_here
-GEMINI_API_KEY=your_gemini_api_key_here
+AI_PROVIDER=gemini
+GEMINI_API_KEY=
 GEMINI_MODEL=gemini-3.8-flash
+OPENAI_API_KEY=
+OPENAI_MODEL=gpt-6-luna
 CLIENT_URL=http://localhost:5173
 ```
 
-`GEMINI_MODEL` is configurable; verify the selected model is currently available to the configured key. Do not put the server key in the client environment.
+Set `AI_PROVIDER=gemini` or `AI_PROVIDER=openai`; the default is Gemini. Configure only the selected provider's key. Both model IDs are configurable through their corresponding environment variables. Do not put provider credentials or model settings in the client environment.
 
 ### Client `.env.example`
 
@@ -491,7 +496,7 @@ Production values must be configured in the hosting provider dashboards. Do not 
 
 ### L1. Automated tests
 
-Add tests for pure business logic and API behavior. Mock Gemini in tests so routine tests do not require a live API key or incur API charges.
+Add tests for pure business logic, provider selection, both provider adapters, and API behavior. Mock provider responses so routine tests do not require live API keys or incur API charges.
 
 At minimum, test:
 - Each difficulty maps to its exact suspect/clue/hint counts and base score.

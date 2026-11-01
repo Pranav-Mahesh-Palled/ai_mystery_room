@@ -123,7 +123,7 @@ function resultDto(state) {
 async function installApiMock(page, options = {}) {
   const state = makeMockState();
   Object.assign(state, options);
-  await page.route('http://localhost:5000/api/**', async (route) => {
+  await page.route(/\/api\/cases(?:\/|$)/, async (route) => {
     const request = route.request();
     const url = new URL(request.url());
     const pathname = url.pathname;

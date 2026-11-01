@@ -9,6 +9,9 @@ import { createGenerationRateLimiter } from '../middleware/rateLimiter.js';
 import { DIFFICULTY_CONFIG } from '../utils/gameConfig.js';
 import { MysteryGenerationError } from '../services/geminiService.js';
 import Case from '../models/Case.js';
+import { requestDiagnostics } from '../middleware/requestDiagnostics.js';
+import { createAIService } from '../services/aiService.js';
+import { generateMystery as generateOpenAI } from '../services/openaiService.js';
 
 function makeMystery(difficulty = 'Easy') {
   const counts = DIFFICULTY_CONFIG[difficulty];
@@ -113,6 +116,7 @@ async function startApi({
     dbIsReady: () => dbReady,
   });
   const app = express();
+  app.use(requestDiagnostics);
   app.use(express.json({ limit: '16kb', strict: true }));
   app.use('/api/cases', createCaseRouter({ controller, generationLimiter: limiter }));
   app.use(errorHandler);
@@ -127,6 +131,51 @@ async function startApi({
     close: () => new Promise((resolve, reject) => server.close((error) => error ? reject(error) : resolve())),
   };
 }
+
+test('POST /api/cases uses the OpenAI dispatcher and completes validated persistence without revealing the solution', async () => {
+  const previousProvider = process.env.AI_PROVIDER;
+  process.env.AI_PROVIDER = 'openai';
+  const providerRequests = [];
+  const fakeOpenAIClient = {
+    responses: {
+      async parse(request) {
+        providerRequests.push(request);
+        return { output_parsed: makeMystery('Medium') };
+      },
+    },
+  };
+  const dispatcher = createAIService({
+    openai: (input) => generateOpenAI(input, { client: fakeOpenAIClient }),
+    gemini: async () => { throw new Error('Gemini must not be selected'); },
+  });
+
+  try {
+    await withApi({ generateContent: dispatcher.generateMystery }, async (api) => {
+      const { response, body } = await jsonRequest(api.baseUrl, {
+        method: 'POST',
+        body: JSON.stringify({ premise: 'A painting disappears during a private exhibition.', difficulty: 'Medium' }),
+      });
+
+      assert.equal(response.status, 201);
+      assert.match(response.headers.get('x-request-id'), /^[\da-f-]{36}$/i);
+      assert.deepEqual(Object.keys(body).sort(), ['caseId', 'difficulty', 'title']);
+      assert.equal(providerRequests.length, 1);
+      assert.equal(providerRequests[0].model, process.env.OPENAI_MODEL || 'gpt-6-luna');
+      const persisted = api.records.get(body.caseId);
+      assert.ok(persisted);
+      assert.equal(persisted.difficulty, 'Medium');
+      assert.equal(persisted.status, 'active');
+      assert.ok(persisted.clues.every((clue) => clue.discovered === false));
+      assert.ok(persisted.hints.every((hint) => hint.unlocked === false));
+      assert.deepEqual(persisted.solution.supportingClueIds, ['C1', 'C2']);
+      assert.equal(JSON.stringify(body).includes('culpritId'), false);
+      assert.equal(JSON.stringify(body).includes('explanation'), false);
+    });
+  } finally {
+    if (previousProvider === undefined) delete process.env.AI_PROVIDER;
+    else process.env.AI_PROVIDER = previousProvider;
+  }
+});
 
 async function withApi(options, callback) {
   const api = await startApi(options);
@@ -308,7 +357,8 @@ test('generation route rate limit is scoped to generation and returns the standa
     const second = await jsonRequest(api.baseUrl, { method: 'POST', body: payload });
     assert.equal(first.response.status, 201);
     assert.equal(second.response.status, 429);
-    assert.deepEqual(Object.keys(second.body.error).sort(), ['code', 'message']);
+    assert.deepEqual(Object.keys(second.body.error).sort(), ['code', 'message', 'requestId']);
+    assert.equal(second.body.error.requestId, second.response.headers.get('x-request-id'));
     assert.equal(second.body.error.code, 'RATE_LIMITED');
   });
 });

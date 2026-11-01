@@ -5,7 +5,7 @@ export function notFoundHandler(_request, _response, next) {
   next(error);
 }
 
-export function errorHandler(error, _request, response, _next) {
+export function errorHandler(error, request, response, _next) {
   if (response.headersSent) return;
 
   let status = Number.isInteger(error.status) ? error.status : 500;
@@ -31,6 +31,8 @@ export function errorHandler(error, _request, response, _next) {
   }
 
   const errorBody = { code, message };
+  if (request.generationDiagnostics) request.generationDiagnostics.errorCategory = code;
+  if (request.requestId) errorBody.requestId = request.requestId;
   if (status < 500 && Array.isArray(error.details)) {
     errorBody.details = error.details;
   }
